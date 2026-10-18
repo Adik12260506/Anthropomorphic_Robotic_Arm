@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isCapacitorNative } from '../services/api';
-import { Cpu, ShieldCheck, AlertCircle, Bot, Radio, Activity, Database, Key } from 'lucide-react';
+import { Cpu, ShieldCheck, AlertCircle, Bot, Radio, Activity, Database } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { signInWithGoogle, renderGoogleButton, loading, error, clearError } = useAuth();
