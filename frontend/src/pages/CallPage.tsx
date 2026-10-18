@@ -63,14 +63,15 @@ export const CallPage: React.FC<CallPageProps> = ({
   const localStreamRef = useRef<MediaStream | null>(null);
   const currentGestureRef = useRef<GestureType>('NO_HAND');
 
-  // 1. Initialize WebRTC Manager for 2-phone video exchange
+  // 1. Initialize WebRTC Manager and connect signaling immediately for instant peer discovery
   useEffect(() => {
     const mgr = new WebRTCManager({
       onStatusChange: (status) => setWebrtcStatus(status),
       onRemoteStream: (stream) => {
         setRemoteStream(stream);
-        if (remoteVideoRef.current) {
+        if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== stream) {
           remoteVideoRef.current.srcObject = stream;
+          remoteVideoRef.current.play().catch(() => {});
         }
       },
       onPeerCountChange: (count) => setPeerCount(count),
@@ -79,10 +80,13 @@ export const CallPage: React.FC<CallPageProps> = ({
 
     webrtcManagerRef.current = mgr;
 
+    // Connect signaling WebSocket and join room immediately without blocking on camera acquisition
+    mgr.startCall(roomId, getWsSignalingUrl(), localStreamRef.current, isHost);
+
     return () => {
       mgr.endCall();
     };
-  }, []);
+  }, [roomId, isHost]);
 
   // Keep remote video srcObject updated without resetting playing streams
   useEffect(() => {
@@ -186,13 +190,13 @@ export const CallPage: React.FC<CallPageProps> = ({
     };
   }, [isHost]);
 
-  // When local camera stream is ready, begin WebRTC call session
+  // When local camera stream is ready, attach tracks to WebRTC call session
   const handleStreamReady = useCallback((stream: MediaStream) => {
     localStreamRef.current = stream;
     if (webrtcManagerRef.current) {
-      webrtcManagerRef.current.startCall(roomId, getWsSignalingUrl(), stream, isHost);
+      webrtcManagerRef.current.addLocalStream(stream);
     }
-  }, [roomId, isHost]);
+  }, []);
 
   // Process camera frame landmarks through gesture recognizer & debouncer (Active on Phone A)
   const handleFrameLandmarks = useCallback((landmarks: LandmarkPoint[] | undefined) => {

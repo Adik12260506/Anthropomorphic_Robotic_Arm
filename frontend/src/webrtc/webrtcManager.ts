@@ -36,12 +36,12 @@ export class WebRTCManager {
   public async startCall(
     roomId: string,
     signalingBaseUrl: string,
-    localStream: MediaStream,
-    isInitiator: boolean
+    localStream?: MediaStream | null,
+    isInitiator?: boolean
   ): Promise<void> {
     this.roomId = roomId;
-    this.localStream = localStream;
-    this.isInitiator = isInitiator;
+    this.localStream = localStream || null;
+    this.isInitiator = !!isInitiator;
 
     this.callbacks.onStatusChange('connecting');
 
@@ -55,6 +55,39 @@ export class WebRTCManager {
     }
   }
 
+  public addLocalStream(stream: MediaStream): void {
+    this.localStream = stream;
+    if (!this.peerConnection) return;
+
+    for (const track of stream.getTracks()) {
+      const senders = this.peerConnection.getSenders();
+      const existingSender = senders.find(
+        (s) => s.track?.kind === track.kind || (!s.track && track.kind === 'video')
+      );
+      if (existingSender) {
+        existingSender.replaceTrack(track).catch(console.error);
+      } else {
+        const sender = this.peerConnection.addTrack(track, stream);
+        if (track.kind === 'video' && sender) {
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = 1200000;
+            params.degradationPreference = 'maintain-framerate';
+            sender.setParameters(params).catch(() => {});
+          } catch {}
+        }
+      }
+    }
+
+    // Renegotiate if connected as initiator
+    if (this.isInitiator && this.peerConnection.remoteDescription) {
+      this.createOffer();
+    }
+  }
+
   private initPeerConnection(): void {
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -63,6 +96,14 @@ export class WebRTCManager {
     this.peerConnection = new RTCPeerConnection(this.iceServers);
     this.remoteStream = new MediaStream();
     this.callbacks.onRemoteStream(this.remoteStream);
+
+    // Add bidirectional transceivers so peer can receive video/audio even before local camera starts
+    try {
+      this.peerConnection.addTransceiver('video', { direction: 'sendrecv' });
+      this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' });
+    } catch {
+      // Older webviews support standard addTrack fallback
+    }
 
     // Add local tracks to peer connection with optimized framerate preference
     if (this.localStream) {
@@ -153,6 +194,8 @@ export class WebRTCManager {
 
     this.signalingSocket.onerror = (err) => {
       console.warn('Signaling WebSocket error:', err);
+      this.callbacks.onStatusChange('failed');
+      this.callbacks.onError('Signaling connection failed. Ensure backend server is running on the Wi-Fi host.');
     };
 
     this.signalingSocket.onclose = () => {
@@ -174,6 +217,13 @@ export class WebRTCManager {
         }
         break;
 
+      case 'join':
+        console.log('Peer announced join to room:', msg.room_id);
+        if (this.isInitiator) {
+          await this.createOffer();
+        }
+        break;
+
       case 'offer':
         if (!this.isInitiator && msg.sdp) {
           await this.handleOffer(msg.sdp);
@@ -183,16 +233,20 @@ export class WebRTCManager {
       case 'answer':
         if (this.isInitiator && msg.sdp && this.peerConnection) {
           await this.peerConnection.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-          this.processPendingCandidates();
+          await this.processPendingCandidates();
         }
         break;
 
       case 'candidate':
         if (msg.candidate) {
-          if (this.peerConnection?.remoteDescription) {
-            await this.peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          } else {
-            this.pendingCandidates.push(msg.candidate);
+          try {
+            if (this.peerConnection?.remoteDescription && this.peerConnection.remoteDescription.type) {
+              await this.peerConnection.addIceCandidate(new RTCIceCandidate(msg.candidate));
+            } else {
+              this.pendingCandidates.push(msg.candidate);
+            }
+          } catch (e) {
+            console.warn('Error buffering/adding ICE candidate:', e);
           }
         }
         break;
