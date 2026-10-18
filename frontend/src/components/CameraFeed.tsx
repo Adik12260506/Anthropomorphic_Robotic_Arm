@@ -11,6 +11,8 @@ interface CameraFeedProps {
   activeConfidence?: number;
   isMirrored?: boolean;
   onStreamReady?: (stream: MediaStream) => void;
+  enableVision?: boolean;
+  compact?: boolean;
 }
 
 interface CameraErrorState {
@@ -27,6 +29,8 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   activeConfidence = 0,
   isMirrored = true,
   onStreamReady,
+  enableVision = true,
+  compact = false,
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,6 +49,35 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   const lastVideoTimeRef = useRef<number>(-1);
   const fpsFrameCountRef = useRef<number>(0);
   const fpsLastTimeRef = useRef<number>(performance.now());
+
+  // Stable refs for callbacks and active props to eliminate render-loop churn
+  const onStreamReadyRef = useRef(onStreamReady);
+  onStreamReadyRef.current = onStreamReady;
+
+  const onFrameLandmarksRef = useRef(onFrameLandmarks);
+  onFrameLandmarksRef.current = onFrameLandmarks;
+
+  const onFpsUpdateRef = useRef(onFpsUpdate);
+  onFpsUpdateRef.current = onFpsUpdate;
+
+  const activeGestureNameRef = useRef(activeGestureName);
+  activeGestureNameRef.current = activeGestureName;
+
+  const activeConfidenceRef = useRef(activeConfidence);
+  activeConfidenceRef.current = activeConfidence;
+
+  const isMirroredRef = useRef(isMirrored);
+  isMirroredRef.current = isMirrored;
+
+  const facingModeRef = useRef(facingMode);
+  facingModeRef.current = facingMode;
+
+  const enableVisionRef = useRef(enableVision);
+  enableVisionRef.current = enableVision;
+
+  const lastLandmarksRef = useRef<LandmarkPoint[] | undefined>(undefined);
+  const isDetectingRef = useRef<boolean>(false);
+  const lastDetectionTimeRef = useRef<number>(0);
 
   // Initialize MediaPipe Tasks Vision HandLandmarker
   useEffect(() => {
@@ -131,8 +164,8 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         await videoRef.current.play().catch(() => {});
       }
 
-      if (onStreamReady) {
-        onStreamReady(stream);
+      if (onStreamReadyRef.current) {
+        onStreamReadyRef.current(stream);
       }
       setCameraActive(true);
       setCameraError(null);
@@ -179,7 +212,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
       setCameraError(errorState);
       setCameraActive(false);
     }
-  }, [facingMode, micActive, onStreamReady]);
+  }, [facingMode, micActive]);
 
   // Initial trigger of camera
   useEffect(() => {
@@ -201,14 +234,14 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !visionReady || useSimulatedFeed) return;
+    if (!video || !canvas || useSimulatedFeed) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
     let isRunning = true;
 
-    const processLoop = async () => {
+    const processLoop = () => {
       if (!isRunning) return;
 
       if (video.readyState >= 2 && video.currentTime !== lastVideoTimeRef.current) {
@@ -225,37 +258,61 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         const now = performance.now();
         if (now - fpsLastTimeRef.current >= 1000) {
           const currentFps = Math.round((fpsFrameCountRef.current * 1000) / (now - fpsLastTimeRef.current));
-          if (onFpsUpdate) onFpsUpdate(currentFps);
+          if (onFpsUpdateRef.current) onFpsUpdateRef.current(currentFps);
           fpsFrameCountRef.current = 0;
           fpsLastTimeRef.current = now;
         }
 
-        try {
-          const landmarker = await mediaPipeVisionManager.getHandLandmarker();
-          const results = landmarker.detectForVideo(video, performance.now());
-
-          let detectedLandmarks: LandmarkPoint[] | undefined = undefined;
-
-          if (results.landmarks && results.landmarks.length > 0) {
-            detectedLandmarks = results.landmarks[0].map((pt) => ({
-              x: pt.x,
-              y: pt.y,
-              z: pt.z,
-            }));
-          }
-
-          // Draw futuristic skeleton and joints on canvas
-          drawHandOverlay(ctx, detectedLandmarks, canvas.width, canvas.height, {
-            gestureName: activeGestureName,
-            confidence: activeConfidence,
-            isMirrored: isMirrored && facingMode === 'user',
+        // 1. Draw cached landmarks & skeleton smoothly at display refresh rate
+        if (lastLandmarksRef.current && enableVisionRef.current) {
+          drawHandOverlay(ctx, lastLandmarksRef.current, canvas.width, canvas.height, {
+            gestureName: activeGestureNameRef.current,
+            confidence: activeConfidenceRef.current,
+            isMirrored: isMirroredRef.current && facingModeRef.current === 'user',
           });
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
 
-          if (onFrameLandmarks) {
-            onFrameLandmarks(detectedLandmarks);
-          }
-        } catch {
-          // Frame skip if landmarker is busy
+        // 2. Throttled Asynchronous Landmark Detection (target 20 FPS / every 50ms)
+        // Decoupled from video rendering so WebRTC encoding and UI never stutter
+        if (
+          enableVisionRef.current &&
+          visionReady &&
+          !isDetectingRef.current &&
+          now - lastDetectionTimeRef.current >= 50
+        ) {
+          isDetectingRef.current = true;
+          lastDetectionTimeRef.current = now;
+
+          mediaPipeVisionManager
+            .getHandLandmarker()
+            .then((landmarker) => {
+              try {
+                const results = landmarker.detectForVideo(video, performance.now());
+                let detectedLandmarks: LandmarkPoint[] | undefined = undefined;
+
+                if (results.landmarks && results.landmarks.length > 0) {
+                  detectedLandmarks = results.landmarks[0].map((pt) => ({
+                    x: pt.x,
+                    y: pt.y,
+                    z: pt.z,
+                  }));
+                }
+
+                lastLandmarksRef.current = detectedLandmarks;
+                if (onFrameLandmarksRef.current) {
+                  onFrameLandmarksRef.current(detectedLandmarks);
+                }
+              } catch {
+                // Drop frame cleanly on busy inference
+              } finally {
+                isDetectingRef.current = false;
+              }
+            })
+            .catch(() => {
+              isDetectingRef.current = false;
+            });
         }
       }
 
@@ -270,7 +327,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         cancelAnimationFrame(animFrameIdRef.current);
       }
     };
-  }, [visionReady, activeGestureName, activeConfidence, isMirrored, facingMode, useSimulatedFeed, onFrameLandmarks, onFpsUpdate]);
+  }, [visionReady, useSimulatedFeed]);
 
   // Fallback Simulation Loop for Restricted / Demo environments
   useEffect(() => {
@@ -349,11 +406,11 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         isMirrored: false,
       });
 
-      if (onFrameLandmarks) {
-        onFrameLandmarks(landmarks);
+      if (onFrameLandmarksRef.current) {
+        onFrameLandmarksRef.current(landmarks);
       }
-      if (onFpsUpdate) {
-        onFpsUpdate(30);
+      if (onFpsUpdateRef.current) {
+        onFpsUpdateRef.current(30);
       }
 
       simFrameIdRef.current = requestAnimationFrame(simLoop);
@@ -367,7 +424,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         cancelAnimationFrame(simFrameIdRef.current);
       }
     };
-  }, [useSimulatedFeed, onFrameLandmarks, onFpsUpdate]);
+  }, [useSimulatedFeed]);
 
   const toggleCamera = () => {
     if (streamRef.current) {
@@ -394,9 +451,17 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   };
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden glass-panel border border-slate-700/80 bg-slate-950 flex flex-col">
+    <div
+      className={`relative w-full h-full rounded-2xl overflow-hidden glass-panel border border-slate-700/80 bg-slate-950 flex flex-col ${
+        compact ? 'border-none rounded-none !bg-transparent' : ''
+      }`}
+    >
       {/* Video & Canvas Container */}
-      <div className="relative aspect-video w-full flex items-center justify-center bg-black overflow-hidden">
+      <div
+        className={`relative aspect-video w-full flex items-center justify-center bg-black overflow-hidden ${
+          compact ? 'h-full' : ''
+        }`}
+      >
         {/* Live Video Element */}
         <video
           ref={videoRef}
@@ -491,88 +556,92 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         )}
 
         {/* HUD Top Badges */}
-        <div className="absolute top-2 left-2 right-2 flex justify-between items-center z-20 pointer-events-none">
-          <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur border border-slate-700/60 px-2.5 py-1 rounded-lg">
-            <div
-              className={`w-2 h-2 rounded-full ${
-                useSimulatedFeed
-                  ? 'bg-amber-400 animate-ping'
-                  : cameraActive
-                  ? 'bg-emerald-400 animate-pulse'
-                  : 'bg-rose-500'
-              }`}
-            />
-            <span className="text-[11px] font-mono text-slate-200">
-              {useSimulatedFeed ? 'SIMULATED CAMERA' : 'LOCAL CAMERA'}
-            </span>
-          </div>
+        {!compact && (
+          <div className="absolute top-2 left-2 right-2 flex justify-between items-center z-20 pointer-events-none">
+            <div className="flex items-center gap-2 bg-slate-900/80 backdrop-blur border border-slate-700/60 px-2.5 py-1 rounded-lg">
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  useSimulatedFeed
+                    ? 'bg-amber-400 animate-ping'
+                    : cameraActive
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-rose-500'
+                }`}
+              />
+              <span className="text-[11px] font-mono text-slate-200">
+                {useSimulatedFeed ? 'SIMULATED CAMERA' : 'LOCAL CAMERA'}
+              </span>
+            </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-700/60 px-2 py-1 rounded-lg">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="text-[10px] font-mono text-cyan-300">MEDIAPIPE 21</span>
+            <div className="flex items-center gap-1.5 bg-slate-900/80 backdrop-blur border border-slate-700/60 px-2 py-1 rounded-lg">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="text-[10px] font-mono text-cyan-300">MEDIAPIPE 21</span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Control Bar */}
-      <div className="p-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Camera Toggle */}
-          <button
-            onClick={toggleCamera}
-            disabled={useSimulatedFeed}
-            className={`p-2 rounded-xl border transition-colors ${
-              cameraActive && !useSimulatedFeed
-                ? 'bg-slate-800 text-cyan-400 border-slate-700 hover:bg-slate-700'
-                : 'bg-red-500/20 text-red-400 border-red-500/40'
-            }`}
-            title={cameraActive ? 'Turn Off Camera' : 'Turn On Camera'}
-          >
-            {cameraActive ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
-          </button>
-
-          {/* Microphone Toggle */}
-          <button
-            onClick={toggleMic}
-            disabled={useSimulatedFeed}
-            className={`p-2 rounded-xl border transition-colors ${
-              micActive
-                ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700'
-                : 'bg-slate-800/60 text-slate-400 border-slate-700'
-            }`}
-            title={micActive ? 'Mute Microphone' : 'Unmute Microphone'}
-          >
-            {micActive ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-          </button>
-
-          {/* Switch Camera (Front / Rear) */}
-          <button
-            onClick={switchCamera}
-            disabled={useSimulatedFeed}
-            className="p-2 rounded-xl border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 transition-colors disabled:opacity-40"
-            title="Switch Camera (Front/Rear)"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {useSimulatedFeed && (
+      {!compact && (
+        <div className="p-3 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {/* Camera Toggle */}
             <button
-              onClick={() => {
-                setUseSimulatedFeed(false);
-                initCamera();
-              }}
-              className="text-[10px] font-mono text-cyan-400 hover:underline"
+              onClick={toggleCamera}
+              disabled={useSimulatedFeed}
+              className={`p-2 rounded-xl border transition-colors ${
+                cameraActive && !useSimulatedFeed
+                  ? 'bg-slate-800 text-cyan-400 border-slate-700 hover:bg-slate-700'
+                  : 'bg-red-500/20 text-red-400 border-red-500/40'
+              }`}
+              title={cameraActive ? 'Turn Off Camera' : 'Turn On Camera'}
             >
-              Switch to Real Cam
+              {cameraActive ? <Camera className="w-4 h-4" /> : <CameraOff className="w-4 h-4" />}
             </button>
-          )}
-          <span className="text-[11px] font-mono text-slate-400">
-            {facingMode === 'user' ? 'Front Cam' : 'Rear Cam'}
-          </span>
+
+            {/* Microphone Toggle */}
+            <button
+              onClick={toggleMic}
+              disabled={useSimulatedFeed}
+              className={`p-2 rounded-xl border transition-colors ${
+                micActive
+                  ? 'bg-slate-800 text-emerald-400 border-slate-700 hover:bg-slate-700'
+                  : 'bg-slate-800/60 text-slate-400 border-slate-700'
+              }`}
+              title={micActive ? 'Mute Microphone' : 'Unmute Microphone'}
+            >
+              {micActive ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+            </button>
+
+            {/* Switch Camera (Front / Rear) */}
+            <button
+              onClick={switchCamera}
+              disabled={useSimulatedFeed}
+              className="p-2 rounded-xl border bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 transition-colors disabled:opacity-40"
+              title="Switch Camera (Front/Rear)"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {useSimulatedFeed && (
+              <button
+                onClick={() => {
+                  setUseSimulatedFeed(false);
+                  initCamera();
+                }}
+                className="text-[10px] font-mono text-cyan-400 hover:underline"
+              >
+                Switch to Real Cam
+              </button>
+            )}
+            <span className="text-[11px] font-mono text-slate-400">
+              {facingMode === 'user' ? 'Front Cam' : 'Rear Cam'}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

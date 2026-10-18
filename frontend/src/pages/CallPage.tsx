@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CameraFeed } from '../components/CameraFeed';
 import { GestureCard } from '../components/GestureCard';
 import { RobotCommandViewer } from '../components/RobotCommandViewer';
@@ -61,6 +61,7 @@ export const CallPage: React.FC<CallPageProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const webrtcManagerRef = useRef<WebRTCManager | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const currentGestureRef = useRef<GestureType>('NO_HAND');
 
   // 1. Initialize WebRTC Manager for 2-phone video exchange
   useEffect(() => {
@@ -83,13 +84,15 @@ export const CallPage: React.FC<CallPageProps> = ({
     };
   }, []);
 
-  // Keep remote video srcObject updated when remoteStream or primaryFeed changes
+  // Keep remote video srcObject updated without resetting playing streams
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
+      if (remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
+      }
       remoteVideoRef.current.play().catch(() => {});
     }
-  }, [remoteStream, primaryFeed]);
+  }, [remoteStream]);
 
   // 2. Phone B: Subscribe to real-time /ws/robot telemetry to mirror Phone A's robot control
   useEffect(() => {
@@ -184,22 +187,23 @@ export const CallPage: React.FC<CallPageProps> = ({
   }, [isHost]);
 
   // When local camera stream is ready, begin WebRTC call session
-  const handleStreamReady = (stream: MediaStream) => {
+  const handleStreamReady = useCallback((stream: MediaStream) => {
     localStreamRef.current = stream;
     if (webrtcManagerRef.current) {
       webrtcManagerRef.current.startCall(roomId, getWsSignalingUrl(), stream, isHost);
     }
-  };
+  }, [roomId, isHost]);
 
   // Process camera frame landmarks through gesture recognizer & debouncer (Active on Phone A)
-  const handleFrameLandmarks = (landmarks: LandmarkPoint[] | undefined) => {
+  const handleFrameLandmarks = useCallback((landmarks: LandmarkPoint[] | undefined) => {
     // Only Phone A acts as primary vision gesture controller
     if (!isHost) return;
 
     const raw = defaultGestureRecognizer.recognize(landmarks);
     const stable = debouncer.update(raw);
 
-    if (stable.gesture !== gestureResult.gesture) {
+    if (stable.gesture !== currentGestureRef.current) {
+      currentGestureRef.current = stable.gesture;
       setGestureResult(stable);
 
       // Safety check: Only generate and transmit robot commands if gesture is recognized and confident
@@ -234,7 +238,7 @@ export const CallPage: React.FC<CallPageProps> = ({
           });
       }
     }
-  };
+  }, [isHost, debouncer]);
 
   const handleSimulateGesture = (gesture: GestureType) => {
     const cmd = mapGestureToRobotCommand(gesture, isHost ? 'Phone-A-Sim' : 'Phone-B-Sim');
@@ -375,145 +379,148 @@ export const CallPage: React.FC<CallPageProps> = ({
         {/* Primary Video / Camera Column */}
         <div className="lg:col-span-7 flex flex-col gap-3">
           <div className="relative">
-            {/* Primary View: Can be Local Camera (default on Phone A) or Remote Video (default on Phone B) */}
-            {primaryFeed === 'local' ? (
-              <div>
-                <CameraFeed
-                  onStreamReady={handleStreamReady}
-                  onFrameLandmarks={isHost ? handleFrameLandmarks : undefined}
-                  onFpsUpdate={setFps}
-                  activeGestureName={gestureResult.gesture}
-                  activeConfidence={gestureResult.confidence}
-                />
+            {/* Local Camera Container (Always mounted so tracks are never destroyed) */}
+            <div
+              className={
+                primaryFeed === 'local'
+                  ? 'w-full block relative z-10'
+                  : 'absolute bottom-16 right-3 w-36 sm:w-52 aspect-video rounded-xl overflow-hidden glass-panel-glow border-2 border-cyan-500/70 bg-black z-30 shadow-2xl cursor-pointer group transition-all duration-300 hover:scale-105'
+              }
+              onClick={primaryFeed === 'remote' ? () => setPrimaryFeed('local') : undefined}
+              title={primaryFeed === 'remote' ? 'Click to swap to Local Camera' : undefined}
+            >
+              <CameraFeed
+                enableVision={isHost}
+                compact={primaryFeed === 'remote'}
+                onStreamReady={handleStreamReady}
+                onFrameLandmarks={isHost ? handleFrameLandmarks : undefined}
+                onFpsUpdate={setFps}
+                activeGestureName={gestureResult.gesture}
+                activeConfidence={gestureResult.confidence}
+              />
+              {primaryFeed === 'remote' && (
+                <div className="absolute top-1 left-1.5 flex items-center gap-1 bg-slate-900/85 px-1.5 py-0.5 rounded text-[9px] font-mono text-cyan-300 pointer-events-none">
+                  <Camera className="w-2.5 h-2.5" />
+                  <span>LOCAL CAM</span>
+                </div>
+              )}
+            </div>
 
-                {/* PiP Floating Window: Remote Video Feed */}
-                <div
-                  onClick={() => setPrimaryFeed('remote')}
-                  className="absolute bottom-16 right-3 w-36 sm:w-48 aspect-video rounded-xl overflow-hidden glass-panel-glow border border-cyan-500/50 bg-black z-30 shadow-2xl cursor-pointer group transition-transform hover:scale-105"
-                  title="Click to switch to Remote Feed"
-                >
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute top-1 left-1.5 flex items-center gap-1 bg-slate-900/85 px-1.5 py-0.5 rounded text-[9px] font-mono text-cyan-300">
-                    <Video className="w-2.5 h-2.5" />
-                    <span>{isHost ? 'REMOTE (PHONE B)' : 'REMOTE (PHONE A)'}</span>
-                  </div>
-                  {!remoteStream && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 p-2 text-center text-[9px] font-mono text-slate-400">
-                      <span>Waiting for peer stream...</span>
+            {/* Remote Peer Video Container (Always mounted so WebRTC decoder is never reset) */}
+            <div
+              className={
+                primaryFeed === 'remote'
+                  ? 'relative aspect-video w-full rounded-2xl overflow-hidden glass-panel border border-cyan-500/50 bg-slate-950 flex flex-col items-center justify-center z-10'
+                  : 'absolute bottom-16 right-3 w-36 sm:w-52 aspect-video rounded-xl overflow-hidden glass-panel-glow border-2 border-cyan-500/70 bg-black z-30 shadow-2xl cursor-pointer group transition-all duration-300 hover:scale-105'
+              }
+              onClick={primaryFeed === 'local' ? () => setPrimaryFeed('remote') : undefined}
+              title={primaryFeed === 'local' ? 'Click to swap to Remote Video' : undefined}
+            >
+              <video
+                ref={remoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+
+              {/* Overlays when Remote Video is Primary View */}
+              {primaryFeed === 'remote' && (
+                <>
+                  {/* Cybernetic Scanline */}
+                  <div className="hud-scanline" />
+
+                  {/* Top Badges for Remote Feed */}
+                  <div className="absolute top-3 left-3 right-3 flex justify-between items-center z-20 pointer-events-none">
+                    <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-cyan-500/40 px-3 py-1 rounded-xl shadow-lg">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          remoteStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'
+                        }`}
+                      />
+                      <span className="text-xs font-mono font-bold text-cyan-300">
+                        {remoteStream
+                          ? isHost
+                            ? '● REMOTE PEER VIEW (PHONE B)'
+                            : '● REMOTE ROBOT VIEW (PHONE A CONTROLLER)'
+                          : 'WAITING FOR PEER VIDEO STREAM...'}
+                      </span>
                     </div>
+
+                    <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur border border-slate-700 px-2.5 py-1 rounded-xl">
+                      <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                      <span className="text-[10px] font-mono text-slate-300">
+                        {isHost ? 'OBSERVER FEED' : 'VISION FEED'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Telemetry HUD Overlay at bottom of Remote Stream */}
+                  <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-slate-700/80 p-2.5 rounded-xl z-20 flex flex-wrap items-center justify-between gap-2 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-mono text-slate-400">DETECTED GESTURE</span>
+                        <span className="text-xs font-mono font-bold text-emerald-400">
+                          {gestureResult.gesture}
+                        </span>
+                      </div>
+                      <div className="h-6 w-[1px] bg-slate-700" />
+                      <div className="flex flex-col">
+                        <span className="text-[9px] font-mono text-slate-400">ROBOT COMMAND</span>
+                        <span className="text-xs font-mono font-bold text-cyan-400">
+                          {activeCommand.command}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-300 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
+                      <Cpu className="w-3 h-3 text-cyan-400" />
+                      <span className="text-cyan-400 font-bold">SERVOS:</span>
+                      <span>T:{activeCommand.servos.thumb}°</span>
+                      <span>I:{activeCommand.servos.index}°</span>
+                      <span>M:{activeCommand.servos.middle}°</span>
+                      <span>R:{activeCommand.servos.ring}°</span>
+                      <span>L:{activeCommand.servos.little}°</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Waiting overlay for remote stream */}
+              {!remoteStream && (
+                <div
+                  className={`absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 p-3 text-center z-10 ${
+                    primaryFeed === 'local' ? 'text-[9px]' : 'p-5'
+                  }`}
+                >
+                  <Radio
+                    className={`${
+                      primaryFeed === 'local' ? 'w-5 h-5 mb-1' : 'w-10 h-10 mb-3'
+                    } text-cyan-400 animate-pulse`}
+                  />
+                  <h4
+                    className={`${
+                      primaryFeed === 'local' ? 'text-[10px]' : 'text-sm'
+                    } font-mono font-bold text-white uppercase`}
+                  >
+                    {isHost ? 'Waiting for Phone B' : 'Waiting for Phone A'}
+                  </h4>
+                  {primaryFeed === 'remote' && (
+                    <p className="text-xs font-mono text-slate-400 mt-2 max-w-sm">
+                      Connect peer device to Room <span className="text-cyan-400 font-bold">{roomId}</span>.
+                      Once connected, video streaming will display here automatically.
+                    </p>
                   )}
                 </div>
-              </div>
-            ) : (
-              /* Primary View: Remote Video Feed (Full Screen for Phone B Reviewer) */
-              <div className="relative aspect-video w-full rounded-2xl overflow-hidden glass-panel border border-cyan-500/50 bg-slate-950 flex flex-col items-center justify-center">
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
+              )}
 
-                {/* Cybernetic Scanline */}
-                <div className="hud-scanline" />
-
-                {/* Top Badges for Remote Feed */}
-                <div className="absolute top-3 left-3 right-3 flex justify-between items-center z-20 pointer-events-none">
-                  <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur border border-cyan-500/40 px-3 py-1 rounded-xl shadow-lg">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        remoteStream ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400 animate-ping'
-                      }`}
-                    />
-                    <span className="text-xs font-mono font-bold text-cyan-300">
-                      {remoteStream
-                        ? isHost
-                          ? '● REMOTE PEER VIEW (PHONE B)'
-                          : '● REMOTE ROBOT VIEW (PHONE A CONTROLLER)'
-                        : 'WAITING FOR PEER VIDEO STREAM...'}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 bg-slate-900/90 backdrop-blur border border-slate-700 px-2.5 py-1 rounded-xl">
-                    <Eye className="w-3.5 h-3.5 text-cyan-400" />
-                    <span className="text-[10px] font-mono text-slate-300">
-                      {isHost ? 'OBSERVER FEED' : 'VISION FEED'}
-                    </span>
-                  </div>
+              {/* PiP mini header when remote is in PiP */}
+              {primaryFeed === 'local' && (
+                <div className="absolute top-1 left-1.5 flex items-center gap-1 bg-slate-900/85 px-1.5 py-0.5 rounded text-[9px] font-mono text-cyan-300 z-20 pointer-events-none">
+                  <Video className="w-2.5 h-2.5" />
+                  <span>{isHost ? 'REMOTE (PHONE B)' : 'REMOTE (PHONE A)'}</span>
                 </div>
-
-                {/* Telemetry HUD Overlay at bottom of Remote Stream */}
-                <div className="absolute bottom-3 left-3 right-3 bg-slate-950/90 backdrop-blur-md border border-slate-700/80 p-2.5 rounded-xl z-20 flex flex-wrap items-center justify-between gap-2 shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-mono text-slate-400">DETECTED GESTURE</span>
-                      <span className="text-xs font-mono font-bold text-emerald-400">
-                        {gestureResult.gesture}
-                      </span>
-                    </div>
-                    <div className="h-6 w-[1px] bg-slate-700" />
-                    <div className="flex flex-col">
-                      <span className="text-[9px] font-mono text-slate-400">ROBOT COMMAND</span>
-                      <span className="text-xs font-mono font-bold text-cyan-400">
-                        {activeCommand.command}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 font-mono text-[10px] text-slate-300 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
-                    <Cpu className="w-3 h-3 text-cyan-400" />
-                    <span className="text-cyan-400 font-bold">SERVOS:</span>
-                    <span>T:{activeCommand.servos.thumb}°</span>
-                    <span>I:{activeCommand.servos.index}°</span>
-                    <span>M:{activeCommand.servos.middle}°</span>
-                    <span>R:{activeCommand.servos.ring}°</span>
-                    <span>L:{activeCommand.servos.little}°</span>
-                  </div>
-                </div>
-
-                {!remoteStream && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 p-5 text-center z-10">
-                    <Radio className="w-10 h-10 text-cyan-400 animate-pulse mb-3" />
-                    <h4 className="text-sm font-mono font-bold text-white uppercase">
-                      Waiting for Phone A Video Stream
-                    </h4>
-                    <p className="text-xs font-mono text-slate-400 mt-2 max-w-sm">
-                      Connect Phone A to Room <span className="text-cyan-400 font-bold">{roomId}</span>.
-                      Once Phone A begins video streaming, it will appear here automatically.
-                    </p>
-                  </div>
-                )}
-
-                {/* PiP Floating Window: Local Camera Feed */}
-                <div
-                  onClick={() => setPrimaryFeed('local')}
-                  className="absolute bottom-16 right-3 w-36 sm:w-48 rounded-xl overflow-hidden glass-panel-glow border border-slate-700 bg-black z-30 shadow-2xl cursor-pointer group transition-transform hover:scale-105"
-                  title="Click to switch to Local Camera"
-                >
-                  <div className="relative aspect-video">
-                    {/* Render CameraFeed in background or mini mode */}
-                    <div className="w-full h-full scale-[0.6] origin-top-left pointer-events-none">
-                      <CameraFeed
-                        onStreamReady={handleStreamReady}
-                        onFrameLandmarks={isHost ? handleFrameLandmarks : undefined}
-                        onFpsUpdate={setFps}
-                        activeGestureName={gestureResult.gesture}
-                        activeConfidence={gestureResult.confidence}
-                      />
-                    </div>
-                    <div className="absolute top-1 left-1.5 flex items-center gap-1 bg-slate-900/85 px-1.5 py-0.5 rounded text-[9px] font-mono text-slate-200">
-                      <Camera className="w-2.5 h-2.5" />
-                      <span>LOCAL CAM</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Prominent Gesture Display Card */}

@@ -64,22 +64,38 @@ export class WebRTCManager {
     this.remoteStream = new MediaStream();
     this.callbacks.onRemoteStream(this.remoteStream);
 
-    // Add local tracks to peer connection
+    // Add local tracks to peer connection with optimized framerate preference
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {
-        this.peerConnection.addTrack(track, this.localStream);
+        const sender = this.peerConnection.addTrack(track, this.localStream);
+        if (track.kind === 'video' && sender) {
+          try {
+            const params = sender.getParameters();
+            if (!params.encodings || params.encodings.length === 0) {
+              params.encodings = [{}];
+            }
+            params.encodings[0].maxBitrate = 1200000; // 1.2 Mbps for smooth, low-latency 480p/720p
+            params.degradationPreference = 'maintain-framerate'; // Prioritize high FPS over high res to stop stuttering
+            sender.setParameters(params).catch(() => {});
+          } catch {
+            // Browser might not allow immediate setParameters before negotiation
+          }
+        }
       }
     }
 
-    // Handle incoming remote tracks
+    // Handle incoming remote tracks smoothly
     this.peerConnection.ontrack = (event) => {
       console.log('WebRTC: Remote track received:', event.track.kind);
-      if (this.remoteStream) {
-        event.streams[0].getTracks().forEach((track) => {
-          if (!this.remoteStream!.getTracks().some((t) => t.id === track.id)) {
-            this.remoteStream!.addTrack(track);
-          }
-        });
+      if (event.streams && event.streams[0]) {
+        this.remoteStream = event.streams[0];
+        this.callbacks.onRemoteStream(event.streams[0]);
+        this.callbacks.onStatusChange('connected');
+      } else if (this.remoteStream) {
+        if (!this.remoteStream.getTracks().some((t) => t.id === event.track.id)) {
+          this.remoteStream.addTrack(event.track);
+        }
+        this.callbacks.onRemoteStream(this.remoteStream);
         this.callbacks.onStatusChange('connected');
       }
     };
