@@ -1,11 +1,19 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { isCapacitorNative } from '../services/api';
-import { Cpu, ShieldCheck, AlertCircle, Bot, Radio, Activity, Fingerprint } from 'lucide-react';
+import { Cpu, ShieldCheck, AlertCircle, Bot, Radio, Activity, Database, Key } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
-  const { signInWithGoogle, loading, error, clearError } = useAuth();
+  const { signInWithGoogle, renderGoogleButton, loading, error, clearError } = useAuth();
   const isNative = isCapacitorNative();
+
+  useEffect(() => {
+    // Attempt rendering the official Google Identity Services button
+    const timer = setTimeout(() => {
+      renderGoogleButton('google-signin-btn-container');
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [renderGoogleButton]);
 
   return (
     <div className="min-h-screen bg-[#060911] text-slate-100 flex flex-col justify-between selection:bg-cyan-500 selection:text-slate-950 font-sans relative overflow-hidden">
@@ -36,7 +44,7 @@ export const LoginPage: React.FC = () => {
 
         <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400 bg-slate-900/60 border border-slate-800 px-2.5 py-1 rounded-full">
           <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span>PORTAL SECURE</span>
+          <span>MONGODB AUTH PORTAL</span>
         </div>
       </header>
 
@@ -67,7 +75,7 @@ export const LoginPage: React.FC = () => {
               Operator Authentication
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Sign in to access robotic telemetry, MediaPipe hand tracking, and 5-channel servo control.
+              Sign in with your Google Account. Profile and telemetry sessions are saved in MongoDB.
             </p>
           </div>
 
@@ -90,15 +98,18 @@ export const LoginPage: React.FC = () => {
 
           {/* Primary Action: Google Sign-In */}
           <div className="space-y-4">
+            {/* Official Google Identity Services Button Container */}
+            <div id="google-signin-btn-container" className="flex justify-center min-h-[44px]" />
+
+            {/* Custom Cybernetic Fallback Button */}
             <button
               onClick={() => signInWithGoogle()}
               disabled={loading}
               className="w-full relative group overflow-hidden rounded-xl p-[1px] font-medium transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg hover:shadow-cyan-500/20 active:scale-[0.99]"
             >
-              {/* Button gradient border */}
               <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 via-emerald-400 to-cyan-500 rounded-xl group-hover:opacity-100 opacity-80 transition-opacity" />
-              
-              <div className="relative px-5 py-3.5 bg-slate-950 rounded-[11px] flex items-center justify-center gap-3 transition-colors group-hover:bg-slate-900/90">
+
+              <div className="relative px-5 py-3 bg-slate-950 rounded-[11px] flex items-center justify-center gap-3 transition-colors group-hover:bg-slate-900/90">
                 {loading ? (
                   <div className="flex items-center gap-2.5 text-cyan-400">
                     <div className="w-4 h-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
@@ -106,7 +117,6 @@ export const LoginPage: React.FC = () => {
                   </div>
                 ) : (
                   <>
-                    {/* Google 'G' official colored vector icon */}
                     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                       <path
                         fill="#4285F4"
@@ -135,8 +145,8 @@ export const LoginPage: React.FC = () => {
 
             {/* Verification / Security note */}
             <div className="flex items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500">
-              <Fingerprint className="w-3.5 h-3.5 text-cyan-500/70" />
-              <span>Firebase Native Authentication • Secure Session</span>
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span>MongoDB User Store • Google OAuth 2.0 • JWT Session</span>
             </div>
           </div>
 
@@ -145,16 +155,16 @@ export const LoginPage: React.FC = () => {
             <div className="bg-slate-900/50 p-2 rounded-lg border border-slate-800/60">
               <div className="text-slate-500 flex items-center gap-1">
                 <Radio className="w-3 h-3 text-cyan-400" />
-                <span>PACKAGE ID</span>
+                <span>DATABASE</span>
               </div>
-              <div className="text-cyan-300 font-semibold truncate mt-0.5">com.roboticarm.vision</div>
+              <div className="text-cyan-300 font-semibold truncate mt-0.5">MongoDB Atlas</div>
             </div>
             <div className="bg-slate-900/50 p-2 rounded-lg border border-slate-800/60">
               <div className="text-slate-500 flex items-center gap-1">
                 <Activity className="w-3 h-3 text-emerald-400" />
-                <span>VISION ENGINE</span>
+                <span>AUTH ENGINE</span>
               </div>
-              <div className="text-emerald-300 font-semibold truncate mt-0.5">MediaPipe + WebRTC</div>
+              <div className="text-emerald-300 font-semibold truncate mt-0.5">Google Identity (GIS)</div>
             </div>
           </div>
         </div>

@@ -1,14 +1,12 @@
 import React, { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { FirebaseAuthentication, type User as CapacitorFirebaseUser } from '@capacitor-firebase/authentication';
-import { onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut, type User as FirebaseWebUser } from 'firebase/auth';
-import { auth, googleAuthProvider } from '../services/firebase';
-import { isCapacitorNative } from '../services/api';
+import { getApiBaseUrl } from '../services/api';
 
 export interface AuthUser {
   uid: string;
   email: string | null;
   displayName: string | null;
   photoURL: string | null;
+  role?: string;
 }
 
 export interface AuthContextType {
@@ -18,11 +16,24 @@ export interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
+  renderGoogleButton: (containerId: string) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY_USER = 'ROBOT_ARM_AUTH_USER';
+const STORAGE_KEY_TOKEN = 'ROBOT_ARM_AUTH_TOKEN';
+
+// Configurable Google Client ID from environment or fallback
+const GOOGLE_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  '860611224060-lsrni5qv5p6v8sq1domna86nt71f3mrt.apps.googleusercontent.com';
+
+declare global {
+  interface Window {
+    google?: any;
+  }
+}
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -36,167 +47,186 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const saveUser = useCallback((u: AuthUser | null) => {
+  const saveUserSession = useCallback((u: AuthUser | null, token?: string) => {
     setUser(u);
     try {
       if (u) {
         localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(u));
+        if (token) localStorage.setItem(STORAGE_KEY_TOKEN, token);
       } else {
         localStorage.removeItem(STORAGE_KEY_USER);
+        localStorage.removeItem(STORAGE_KEY_TOKEN);
       }
     } catch {
       // ignore storage errors
     }
   }, []);
 
-  // Initialize and listen to Auth state changes
+  // Check existing token and validate session with MongoDB on mount
   useEffect(() => {
     let isMounted = true;
 
-    const initAuth = async () => {
-      const isNative = isCapacitorNative();
-
-      if (isNative) {
-        try {
-          // Check native Capacitor Firebase current user
-          const result = await FirebaseAuthentication.getCurrentUser();
-          if (result.user && isMounted) {
-            saveUser({
-              uid: result.user.uid,
-              email: result.user.email ?? null,
-              displayName: result.user.displayName ?? null,
-              photoURL: result.user.photoUrl ?? null,
-            });
-          }
-        } catch {
-          // Native user not signed in yet
-        }
-      }
-
-      // Also listen to Firebase Web SDK auth state changes
-      const unsubscribeWeb = onAuthStateChanged(auth, (webUser: FirebaseWebUser | null) => {
-        if (!isMounted) return;
-        if (webUser) {
-          saveUser({
-            uid: webUser.uid,
-            email: webUser.email,
-            displayName: webUser.displayName,
-            photoURL: webUser.photoURL,
-          });
-        } else if (!isNative) {
-          saveUser(null);
-        }
-        setLoading(false);
-      });
-
-      // Listen to Capacitor native auth state changes
-      let listenerHandle: any = null;
-      if (isNative) {
-        try {
-          listenerHandle = await FirebaseAuthentication.addListener(
-            'authStateChange',
-            (change: { user: CapacitorFirebaseUser | null }) => {
-              if (!isMounted) return;
-              if (change.user) {
-                saveUser({
-                  uid: change.user.uid,
-                  email: change.user.email ?? null,
-                  displayName: change.user.displayName ?? null,
-                  photoURL: change.user.photoUrl ?? null,
-                });
-              } else {
-                saveUser(null);
-              }
-              setLoading(false);
-            }
-          );
-        } catch {
-          // ignore
-        }
-      }
-
-      // Safety timeout for loading state
-      setTimeout(() => {
+    const verifySession = async () => {
+      const token = localStorage.getItem(STORAGE_KEY_TOKEN);
+      if (!token) {
         if (isMounted) setLoading(false);
-      }, 1500);
+        return;
+      }
 
-      return () => {
-        unsubscribeWeb();
-        if (listenerHandle) {
-          listenerHandle.remove();
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (res.ok && isMounted) {
+          const profile = await res.json();
+          saveUserSession({
+            uid: profile.id,
+            email: profile.email,
+            displayName: profile.name,
+            photoURL: profile.picture,
+            role: profile.role,
+          });
+        } else if (res.status === 401 && isMounted) {
+          saveUserSession(null);
         }
-      };
+      } catch (err) {
+        console.warn('Session check warning:', err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     };
 
-    initAuth();
+    verifySession();
 
     return () => {
       isMounted = false;
     };
-  }, [saveUser]);
+  }, [saveUserSession]);
 
+  // Handle incoming Google credential from Google Identity Services
+  const handleGoogleCredential = useCallback(
+    async (credential: string) => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const apiBase = getApiBaseUrl();
+        const res = await fetch(`${apiBase}/api/auth/google`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ credential }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.detail || 'Google authentication failed.');
+        }
+
+        saveUserSession(
+          {
+            uid: data.user.id,
+            email: data.user.email,
+            displayName: data.user.name,
+            photoURL: data.user.picture,
+            role: data.user.role,
+          },
+          data.token
+        );
+      } catch (err: any) {
+        console.error('Google Sign-In Error:', err);
+        setError(err.message || 'Failed to authenticate with Google.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [saveUserSession]
+  );
+
+  // Initialize Google Identity Services
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const initGsi = () => {
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: (response: { credential: string }) => {
+            if (response.credential) {
+              handleGoogleCredential(response.credential);
+            }
+          },
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+      }
+    };
+
+    if (window.google?.accounts?.id) {
+      initGsi();
+    } else {
+      const interval = setInterval(() => {
+        if (window.google?.accounts?.id) {
+          clearInterval(interval);
+          initGsi();
+        }
+      }, 300);
+      return () => clearInterval(interval);
+    }
+  }, [handleGoogleCredential]);
+
+  // Trigger Google Sign-In prompt
   const signInWithGoogle = useCallback(async () => {
     setError(null);
-    setLoading(true);
 
-    try {
-      const isNative = isCapacitorNative();
-
-      if (isNative) {
-        // Native Android Google Sign-In sheet via Google Play Services
-        const result = await FirebaseAuthentication.signInWithGoogle();
-        if (result.user) {
-          saveUser({
-            uid: result.user.uid,
-            email: result.user.email ?? null,
-            displayName: result.user.displayName ?? null,
-            photoURL: result.user.photoUrl ?? null,
-          });
+    if (window.google?.accounts?.id) {
+      window.google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // If One Tap is skipped, fallback to click popup or direct prompt
+          console.log('Google One Tap notice:', notification.getNotDisplayedReason());
         }
-      } else {
-        // Web Browser Popup Sign-In
-        const result = await signInWithPopup(auth, googleAuthProvider);
-        if (result.user) {
-          saveUser({
-            uid: result.user.uid,
-            email: result.user.email,
-            displayName: result.user.displayName,
-            photoURL: result.user.photoURL,
-          });
-        }
-      }
-    } catch (err: any) {
-      console.error('Google Sign-In Error:', err);
-      let errorMsg = err?.message || 'Failed to sign in with Google.';
-
-      if (err?.code === 'auth/popup-closed-by-user' || err?.message?.includes('closed')) {
-        errorMsg = 'Sign-in cancelled. Please try again.';
-      } else if (err?.code === 'auth/network-request-failed') {
-        errorMsg = 'Network error. Please check your internet connection.';
-      } else if (err?.message?.includes('10:') || err?.message?.includes('Developer Error')) {
-        errorMsg = 'Android SHA-1 fingerprint configuration required in Firebase Console for native sign-in.';
-      }
-
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
+      });
+    } else {
+      setError('Google Identity Services is loading. Please check your internet connection or try again in a moment.');
     }
-  }, [saveUser]);
+  }, []);
+
+  // Render official Google button into any container DOM element
+  const renderGoogleButton = useCallback(
+    (containerId: string) => {
+      if (typeof window === 'undefined' || !window.google?.accounts?.id) return;
+      const el = document.getElementById(containerId);
+      if (!el) return;
+
+      window.google.accounts.id.renderButton(el, {
+        type: 'standard',
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: 320,
+      });
+    },
+    []
+  );
 
   const signOut = useCallback(async () => {
     setLoading(true);
     try {
-      if (isCapacitorNative()) {
-        await FirebaseAuthentication.signOut().catch(() => {});
+      if (window.google?.accounts?.id) {
+        window.google.accounts.id.disableAutoSelect();
       }
-      await firebaseSignOut(auth).catch(() => {});
-      saveUser(null);
-    } catch (err: any) {
-      console.error('Sign Out Error:', err);
+      saveUserSession(null);
     } finally {
       setLoading(false);
     }
-  }, [saveUser]);
+  }, [saveUserSession]);
 
   const clearError = useCallback(() => setError(null), []);
 
@@ -209,6 +239,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         signInWithGoogle,
         signOut,
         clearError,
+        renderGoogleButton,
       }}
     >
       {children}
@@ -217,4 +248,3 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export { useAuth } from './useAuth';
-

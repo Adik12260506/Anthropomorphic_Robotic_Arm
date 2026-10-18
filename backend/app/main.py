@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from app.api.auth import router as auth_router
+from app.db.mongodb import connect_to_mongo, close_mongo_connection
 from app.robot.simulator import SimulatedRobotController
 from app.websocket.manager import RobotTelemetryManager, WebRTCSignalingManager
 
@@ -21,6 +23,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Anthropomorphic Robotic Arm Controller Backend...")
     controller = SimulatedRobotController()
     await controller.connect()
+    await connect_to_mongo()
 
     app.state.robot_controller = controller
     app.state.telemetry_manager = RobotTelemetryManager(controller)
@@ -32,12 +35,13 @@ async def lifespan(app: FastAPI):
     # Shutdown
     logger.info("Shutting down Robotic Arm Controller Backend...")
     await controller.disconnect()
+    await close_mongo_connection()
 
 
 app = FastAPI(
     title="AI-Enabled Vision-Based Anthropomorphic Robotic Arm API",
-    description="FastAPI Backend for real-time WebRTC signaling and robotic arm servo command pipeline.",
-    version="1.0.0",
+    description="FastAPI Backend for real-time WebRTC signaling, MongoDB persistence, and robotic arm servo command pipeline.",
+    version="1.1.0",
     lifespan=lifespan
 )
 
@@ -50,8 +54,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register REST routes
+# Register REST & Auth routes
 app.include_router(router)
+app.include_router(auth_router)
 
 
 # WebSocket: Real-time Robot Telemetry and Command pipeline
