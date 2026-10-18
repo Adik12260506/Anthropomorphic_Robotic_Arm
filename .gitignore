@@ -1,0 +1,92 @@
+# =============================================================================
+# Root .gitignore for AI-Enabled Anthropomorphic Robotic Arm
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+.venv/
+ENV/
+env/
+.pytest_cache/
+
+# Node.js & Vite
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+frontend/dist/
+dist-ssr/
+*.local
+
+# Environment variables (keep .env.example)
+.env
+.env.production
+frontend/.env
+frontend/.env.production
+frontend/.env.local
+
+# Android / Gradle
+frontend/android/.gradle/
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/local.properties
+frontend/android/.idea/
+frontend/android/*.iml
+frontend/android/app/*.iml
+frontend/android/captures/
+frontend/android/.externalNativeBuild/
+frontend/android/.cxx/
+
+# Archives & Temporary files
+*.zip
+*.tar.gz
+*.rar
+serve_demo.js
+
+# IDE & Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
