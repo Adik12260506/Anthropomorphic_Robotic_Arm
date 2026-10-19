@@ -4,10 +4,12 @@
 
 export type SignalingMessageType =
   | 'join'
+  | 'host_ready'
   | 'room_state'
   | 'offer'
   | 'answer'
   | 'candidate'
+  | 'telemetry'
   | 'leave'
   | 'error';
 
@@ -18,6 +20,7 @@ export interface SignalingMessage {
   message?: string;
   sdp?: RTCSessionDescriptionInit;
   candidate?: RTCIceCandidateInit;
+  command?: any;
   sender_id?: string;
   timestamp?: number;
 }

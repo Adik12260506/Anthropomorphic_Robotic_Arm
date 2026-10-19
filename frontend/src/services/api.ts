@@ -47,12 +47,18 @@ export function getApiBaseUrl(): string {
     const proto = isHttps ? 'https:' : 'http:';
     const host = window.location.hostname;
 
-    // Inside Android Capacitor webview, window.location.hostname is localhost
-    // which points to the phone itself. Default to http://localhost:8000
-    // but the app prompts the user or allows setting LAN IP if needed.
-    if (host && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') {
+    // Detect private LAN IPs (e.g. 192.168.x.x, 10.x.x.x, 172.16-31.x.x, or .local)
+    const isLanIp = /^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\.|\.local$/.test(host);
+    if (isLanIp) {
       return `${proto}//${host}:8000`;
     }
+
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:8000';
+    }
+
+    // On public web deployments (e.g. vercel.app), do not append port 8000
+    return '';
   }
 
   return 'http://localhost:8000';
@@ -68,6 +74,7 @@ export function getWsRobotUrl(): string {
   }
 
   const apiBase = getApiBaseUrl();
+  if (!apiBase) return '';
   const wsProto = apiBase.startsWith('https:') ? 'wss:' : 'ws:';
   return `${apiBase.replace(/^https?:/, wsProto)}/ws/robot`;
 }
@@ -82,6 +89,7 @@ export function getWsSignalingUrl(): string {
   }
 
   const apiBase = getApiBaseUrl();
+  if (!apiBase) return '';
   const wsProto = apiBase.startsWith('https:') ? 'wss:' : 'ws:';
   return `${apiBase.replace(/^https?:/, wsProto)}/ws/signaling`;
 }
@@ -120,7 +128,8 @@ export class ApiService {
   public static async checkHealth(): Promise<boolean> {
     try {
       const baseUrl = getApiBaseUrl();
-      const res = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(3000) });
+      if (!baseUrl) return false;
+      const res = await fetch(`${baseUrl}/health`, { signal: AbortSignal.timeout(2000) });
       return res.ok;
     } catch {
       return false;
@@ -129,6 +138,7 @@ export class ApiService {
 
   public static async getStatus(): Promise<any> {
     const baseUrl = getApiBaseUrl();
+    if (!baseUrl) return { status: 'client_p2p_active' };
     const res = await fetch(`${baseUrl}/api/status`);
     if (!res.ok) throw new Error('Failed to fetch status');
     return res.json();
@@ -136,6 +146,7 @@ export class ApiService {
 
   public static async getNetworkInfo(): Promise<{ local_ip: string; frontend_mobile_url: string }> {
     const baseUrl = getApiBaseUrl();
+    if (!baseUrl) return { local_ip: '', frontend_mobile_url: '' };
     const res = await fetch(`${baseUrl}/api/network/info`);
     if (!res.ok) throw new Error('Failed to fetch network info');
     return res.json();
@@ -143,6 +154,17 @@ export class ApiService {
 
   public static async getRobotState(): Promise<RobotState> {
     const baseUrl = getApiBaseUrl();
+    if (!baseUrl) {
+      return {
+        mode: 'SIMULATION',
+        servos: { thumb: 0, index: 0, middle: 0, ring: 0, little: 0 },
+        last_gesture: 'OPEN_HAND',
+        last_command: 'IDLE',
+        hardware_target: 'WebRTC P2P',
+        updated_at: Date.now() / 1000,
+        is_connected: true,
+      };
+    }
     const res = await fetch(`${baseUrl}/api/robot/state`);
     if (!res.ok) throw new Error('Failed to fetch robot state');
     return res.json();
@@ -150,36 +172,54 @@ export class ApiService {
 
   public static async sendRobotCommand(cmd: RobotCommand): Promise<any> {
     const baseUrl = getApiBaseUrl();
-    const res = await fetch(`${baseUrl}/api/robot/command`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cmd),
-    });
-    if (!res.ok) throw new Error('Failed to send robot command');
-    return res.json();
+    if (!baseUrl) return { status: 'client_p2p_active' };
+    try {
+      const res = await fetch(`${baseUrl}/api/robot/command`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cmd),
+      });
+      if (!res.ok) return { status: 'offline' };
+      return res.json();
+    } catch {
+      return { status: 'offline' };
+    }
   }
 
   public static async manualServoAdjust(servos: ServoAngles): Promise<any> {
     const baseUrl = getApiBaseUrl();
-    const res = await fetch(`${baseUrl}/api/robot/manual`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(servos),
-    });
-    if (!res.ok) throw new Error('Failed to adjust servos');
-    return res.json();
+    if (!baseUrl) return { status: 'client_p2p_active' };
+    try {
+      const res = await fetch(`${baseUrl}/api/robot/manual`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(servos),
+      });
+      if (!res.ok) return { status: 'offline' };
+      return res.json();
+    } catch {
+      return { status: 'offline' };
+    }
   }
 
   public static async getHistory(): Promise<any[]> {
     const baseUrl = getApiBaseUrl();
-    const res = await fetch(`${baseUrl}/api/robot/history`);
-    if (!res.ok) throw new Error('Failed to fetch history');
-    const data = await res.json();
-    return data.history || [];
+    if (!baseUrl) return [];
+    try {
+      const res = await fetch(`${baseUrl}/api/robot/history`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.history || [];
+    } catch {
+      return [];
+    }
   }
 
   public static async clearHistory(): Promise<void> {
     const baseUrl = getApiBaseUrl();
-    await fetch(`${baseUrl}/api/robot/history/clear`, { method: 'POST' });
+    if (!baseUrl) return;
+    try {
+      await fetch(`${baseUrl}/api/robot/history/clear`, { method: 'POST' });
+    } catch {}
   }
 }

@@ -76,11 +76,47 @@ export const CallPage: React.FC<CallPageProps> = ({
       },
       onPeerCountChange: (count) => setPeerCount(count),
       onError: (err) => console.error('WebRTC Call error:', err),
+      onTelemetryReady: (ready) => {
+        if (ready) setTelemetrySynced(true);
+      },
+      onRemoteCommand: (cmd) => {
+        if (!cmd || !cmd.servos) return;
+        setTelemetrySynced(true);
+        setActiveCommand(cmd);
+        const servos: ServoAngles = cmd.servos;
+        const gesture: GestureType = cmd.gesture || 'OPEN_HAND';
+        setGestureResult({
+          gesture,
+          confidence: 0.98,
+          fingers: {
+            thumb: servos.thumb < 90,
+            index: servos.index < 90,
+            middle: servos.middle < 90,
+            ring: servos.ring < 90,
+            little: servos.little < 90,
+          },
+          timestamp: Date.now(),
+        });
+
+        // Add to history log on remote viewer
+        const now = new Date();
+        setHistory((prev) => [
+          {
+            id: `${Date.now()}-${Math.random()}`,
+            timeString: now.toTimeString().split(' ')[0],
+            timestamp: Date.now(),
+            gesture,
+            command: cmd.command || 'REMOTE_P2P_SYNC',
+            servos,
+          },
+          ...prev.slice(0, 49),
+        ]);
+      },
     });
 
     webrtcManagerRef.current = mgr;
 
-    // Connect signaling WebSocket and join room immediately without blocking on camera acquisition
+    // Connect signaling and join room immediately without blocking on camera acquisition
     mgr.startCall(roomId, getWsSignalingUrl(), localStreamRef.current, isHost);
 
     return () => {
@@ -106,8 +142,13 @@ export const CallPage: React.FC<CallPageProps> = ({
     let reconnectTimer: any = null;
 
     const connectTelemetry = () => {
+      const wsUrl = getWsRobotUrl();
+      if (!wsUrl) {
+        // Standalone WebRTC mode: Telemetry is synchronized peer-to-peer via RTCDataChannel and Cloud Signaling
+        return;
+      }
       try {
-        ws = new WebSocket(getWsRobotUrl());
+        ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {
           setTelemetrySynced(true);
@@ -230,7 +271,10 @@ export const CallPage: React.FC<CallPageProps> = ({
           ...prev.slice(0, 49),
         ]);
 
-        // Transmit command to FastAPI backend (which broadcasts to Phone B via /ws/robot)
+        // Synchronize command peer-to-peer with Phone B via WebRTC DataChannel
+        webrtcManagerRef.current?.sendTelemetry(cmd);
+
+        // Transmit command to FastAPI backend (if running with hardware)
         const sendStart = performance.now();
         ApiService.sendRobotCommand(cmd)
           .then(() => {
@@ -247,6 +291,7 @@ export const CallPage: React.FC<CallPageProps> = ({
   const handleSimulateGesture = (gesture: GestureType) => {
     const cmd = mapGestureToRobotCommand(gesture, isHost ? 'Phone-A-Sim' : 'Phone-B-Sim');
     setActiveCommand(cmd);
+    webrtcManagerRef.current?.sendTelemetry(cmd);
     setGestureResult({
       gesture,
       confidence: 0.98,
@@ -277,12 +322,15 @@ export const CallPage: React.FC<CallPageProps> = ({
   };
 
   const handleManualServoAdjust = (servos: ServoAngles) => {
-    setActiveCommand((prev) => ({
-      ...prev,
+    const updated: RobotCommand = {
+      ...activeCommand,
       command: 'MANUAL_OVERRIDE',
       gesture: 'MANUAL',
       servos,
-    }));
+      timestamp: Date.now(),
+    };
+    setActiveCommand(updated);
+    webrtcManagerRef.current?.sendTelemetry(updated);
     ApiService.manualServoAdjust(servos).catch(() => {});
   };
 
@@ -290,6 +338,7 @@ export const CallPage: React.FC<CallPageProps> = ({
     const cmd = mapGestureToRobotCommand(frame.gesture, 'Routine-Replay');
     cmd.servos = frame.servos;
     setActiveCommand(cmd);
+    webrtcManagerRef.current?.sendTelemetry(cmd);
     setGestureResult({
       gesture: frame.gesture,
       confidence: 1.0,

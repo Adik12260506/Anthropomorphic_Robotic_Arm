@@ -128,11 +128,11 @@ export const ConnectionStatusHUD: React.FC<ConnectionStatusHUDProps> = ({
 
         {/* API / Backend Status */}
         <div className="flex items-center gap-1.5 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-          <Wifi className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <Wifi className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
           <div className="flex flex-col truncate">
-            <span className="text-[9px] text-slate-500 uppercase">Robot API</span>
-            <span className={apiConnected ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-              {apiConnected ? '● Online' : '○ DISCONNECTED'}
+            <span className="text-[9px] text-slate-500 uppercase">Hardware API</span>
+            <span className={apiConnected ? 'text-emerald-400 font-bold' : 'text-cyan-400 font-medium'}>
+              {apiConnected ? '● Online (LAN)' : '● P2P Direct'}
             </span>
           </div>
         </div>

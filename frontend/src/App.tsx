@@ -37,6 +37,19 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    // Automatically detect room code from invite URL (e.g. ?room=ROBOT123)
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const roomParam = params.get('room');
+      if (roomParam && roomParam.trim().length > 0) {
+        setCurrentRoomId(roomParam.trim().toUpperCase());
+        setModalMode('join');
+        setShowRoomModal(true);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     checkServer();
     const interval = setInterval(checkServer, 4000);
 
@@ -215,6 +228,7 @@ function AppContent() {
       {showRoomModal && (
         <RoomModal
           defaultMode={modalMode}
+          initialRoomId={currentRoomId}
           onJoinRoom={handleJoinRoom}
           onCancel={() => setShowRoomModal(false)}
           localIp={localIp}

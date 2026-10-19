@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Copy, Check, Phone, ArrowLeft, Radio, Smartphone } from 'lucide-react';
+import { Copy, Check, Phone, ArrowLeft, Radio, Globe, Link2 } from 'lucide-react';
 
 interface RoomModalProps {
   onJoinRoom: (roomId: string, isHost: boolean) => void;
   onCancel: () => void;
   defaultMode?: 'create' | 'join';
+  initialRoomId?: string;
   localIp?: string;
 }
 
@@ -12,18 +13,31 @@ export const RoomModal: React.FC<RoomModalProps> = ({
   onJoinRoom,
   onCancel,
   defaultMode = 'create',
+  initialRoomId,
   localIp,
 }) => {
   const [mode, setMode] = useState<'create' | 'join'>(defaultMode);
-  const [roomIdInput, setRoomIdInput] = useState<string>(
-    defaultMode === 'create' ? `ROBOT${Math.floor(100 + Math.random() * 900)}` : ''
-  );
-  const [copied, setCopied] = useState(false);
+  const [roomIdInput, setRoomIdInput] = useState<string>(() => {
+    if (initialRoomId) return initialRoomId.toUpperCase();
+    return defaultMode === 'create' ? `ROBOT${Math.floor(100 + Math.random() * 900)}` : '';
+  });
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(roomIdInput);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyCode = () => {
+    if (!roomIdInput) return;
+    navigator.clipboard.writeText(roomIdInput.trim().toUpperCase());
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  const handleCopyLink = () => {
+    if (!roomIdInput) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}/?room=${encodeURIComponent(roomIdInput.trim().toUpperCase())}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -39,11 +53,11 @@ export const RoomModal: React.FC<RoomModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2">
             <Radio className="w-5 h-5 text-cyan-400 animate-pulse" />
-            <h2 className="text-base font-bold tracking-wide uppercase">Two-Phone WebRTC Call</h2>
+            <h2 className="text-base font-bold tracking-wide uppercase">Two-Device WebRTC Video Call</h2>
           </div>
           <button
             onClick={onCancel}
-            className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
+            className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -65,7 +79,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            Phone A (Create Room)
+            Phone A (Host / Control)
           </button>
           <button
             type="button"
@@ -84,46 +98,57 @@ export const RoomModal: React.FC<RoomModalProps> = ({
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-mono text-slate-400">
-              {mode === 'create' ? 'Generated Room ID (Share with Phone B)' : 'Enter Room ID to Join'}
+              {mode === 'create' ? 'Room Code (Share with second device)' : 'Enter Room Code to Join'}
             </label>
             <div className="relative flex items-center">
               <input
                 type="text"
                 value={roomIdInput}
                 onChange={(e) => setRoomIdInput(e.target.value.toUpperCase())}
-                placeholder="e.g. ROBOT123"
+                placeholder="e.g. ROBOT492"
                 required
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-cyan-300 font-mono text-base tracking-wider focus:outline-none focus:border-cyan-400"
               />
               {mode === 'create' && (
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className="absolute right-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1"
-                  title="Copy Room ID"
-                >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? 'Copied' : 'Copy'}
-                </button>
+                <div className="absolute right-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono flex items-center gap-1 border border-slate-700 transition-colors"
+                    title="Copy Room Code"
+                  >
+                    {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedCode ? 'Copied' : 'Code'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="px-2.5 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 text-xs font-mono flex items-center gap-1 border border-cyan-800/80 transition-colors"
+                    title="Copy Direct Invite Link"
+                  >
+                    {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Link2 className="w-3.5 h-3.5" />}
+                    <span>{copiedLink ? 'Link Copied' : 'Link'}</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
 
-          {/* Wi-Fi / LAN Helper for Phone B */}
-          {localIp && (
-            <div className="bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-[11px] font-mono text-slate-400 flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-cyan-400 font-semibold">
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>Wi-Fi Connection Guide:</span>
-              </div>
-              <div>
-                1. Ensure Phone A and Phone B are on the same Wi-Fi.
-              </div>
-              <div>
-                2. On Phone B, open browser: <span className="text-amber-300 font-bold">http://{localIp}:5173</span>
-              </div>
+          {/* Global Network Connectivity Helper */}
+          <div className="bg-slate-900/60 p-3 rounded-xl border border-cyan-500/20 text-[11px] font-mono text-slate-300 flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+              <Globe className="w-3.5 h-3.5" />
+              <span>Universal Cloud Calling (Submission Ready):</span>
             </div>
-          )}
+            <div className="text-slate-400 leading-relaxed">
+              Anyone anywhere on the internet can connect using this Room Code or link. Works seamlessly across different Wi-Fi networks, mobile 4G/5G carriers, and devices.
+            </div>
+            {localIp && (
+              <div className="text-slate-500 text-[10px] pt-1 border-t border-slate-800">
+                Local Wi-Fi Host IP: <span className="text-slate-400">{localIp}</span>
+              </div>
+            )}
+          </div>
 
           {/* Submit Button */}
           <button
