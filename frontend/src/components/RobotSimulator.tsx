@@ -53,8 +53,8 @@ export const RobotSimulator: React.FC<RobotSimulatorProps> = ({
    */
   const renderFinger = (cfg: FingerConfig) => {
     const angleDeg = servos[cfg.key] || 0;
-    // Normalized flexion: 0 (straight) -> 1.0 (fully curled)
-    const flexion = Math.min(1.0, Math.max(0, angleDeg / 90));
+    // Normalized flexion: 0 (straight open at 0°) -> 1.0 (fully curled closed at 180°)
+    const flexion = Math.min(1.0, Math.max(0, angleDeg / 180));
 
     const segLen = cfg.length;
     // Joint angles bend progressively based on servo rotation

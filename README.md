@@ -309,16 +309,16 @@ For solo testing, evaluation reviews, or single-laptop demonstrations:
 | # | Hand Gesture | Emo | Robot Action Command | Thumb | Index | Middle | Ring | Little | Kinematic Purpose |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | **OPEN HAND** | ✋ | `OPEN_ALL_FINGERS` | 0° | 0° | 0° | 0° | 0° | Fully open hand, release object / idle |
-| 2 | **CLOSED FIST** | ✊ | `CLOSE_ALL_FINGERS` | 90° | 90° | 90° | 90° | 90° | Power grasp, clutching cylindrical objects |
-| 3 | **THUMBS UP** | 👍 | `THUMBS_UP_POSITION` | 0° | 90° | 90° | 90° | 90° | Thumb extended, 4 fingers locked |
-| 4 | **POINTING** | 👉 | `POINT_INDEX` | 80° | 0° | 90° | 90° | 90° | Precise index pointing, button pressing |
-| 5 | **PINCH** | 🤏 | `PINCH_GRIP` | 65° | 70° | 20° | 20° | 20° | Fine pinch grip for delicate objects |
-| 6 | **PEACE / 2 FINGERS** | ✌️ | `TWO_FINGER_POSITION` | 90° | 0° | 0° | 90° | 90° | Dual-finger scissor or clamp pose |
-| 7 | **ONE FINGER** | ☝️ | `POINT_INDEX` | 85° | 0° | 85° | 85° | 85° | Single finger probe |
-| 8 | **TWO FINGERS** | ✌️ | `TWO_FINGER_POSITION` | 90° | 0° | 0° | 90° | 90° | Parallel 2-finger extension |
-| 9 | **THREE FINGERS** | 🤟 | `THREE_FINGER_EXTEND` | 85° | 0° | 0° | 0° | 85° | 3-finger tripod grip |
-| 10 | **FOUR FINGERS** | 🖐️ | `FOUR_FINGER_EXTEND` | 90° | 0° | 0° | 0° | 0° | Flat palm scoop |
-| 11 | **OK SIGN** | 👌 | `OK_PRECISION_GRIP` | 55° | 60° | 0° | 0° | 0° | Circular precision pinch |
+| 2 | **CLOSED FIST** | ✊ | `CLOSE_ALL_FINGERS` | 180° | 180° | 180° | 180° | 180° | Power grasp, full 180° finger closure |
+| 3 | **THUMBS UP** | 👍 | `THUMBS_UP_POSITION` | 0° | 180° | 180° | 180° | 180° | Thumb extended (0°), 4 fingers curled (180°) |
+| 4 | **POINTING** | 👉 | `POINT_INDEX` | 180° | 0° | 180° | 180° | 180° | Precise index pointing, others curled (180°) |
+| 5 | **PINCH** | 🤏 | `PINCH_GRIP` | 140° | 140° | 180° | 180° | 180° | Fine pinch grip; remaining fingers closed |
+| 6 | **PEACE / 2 FINGERS** | ✌️ | `TWO_FINGER_POSITION` | 180° | 0° | 0° | 180° | 180° | Dual-finger scissor pose; others closed (180°) |
+| 7 | **ONE FINGER** | ☝️ | `EXTEND_INDEX_ONLY` | 180° | 0° | 180° | 180° | 180° | Single finger probe; others closed (180°) |
+| 8 | **TWO FINGERS** | ✌️ | `EXTEND_TWO_FINGERS` | 180° | 0° | 0° | 180° | 180° | Parallel 2-finger extension; others closed (180°) |
+| 9 | **THREE FINGERS** | 🤟 | `THREE_FINGER_EXTEND` | 180° | 0° | 0° | 0° | 180° | 3-finger tripod grip; pinky & thumb closed (180°) |
+| 10 | **FOUR FINGERS** | 🖐️ | `FOUR_FINGER_EXTEND` | 180° | 0° | 0° | 0° | 0° | Flat palm scoop; thumb folded closed (180°) |
+| 11 | **OK SIGN** | 👌 | `OK_PRECISION_GRIP` | 140° | 140° | 0° | 0° | 0° | Circular precision pinch; others extended (0°) |
 
 ---
 

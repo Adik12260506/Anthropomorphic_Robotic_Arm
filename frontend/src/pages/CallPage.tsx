@@ -296,11 +296,11 @@ export const CallPage: React.FC<CallPageProps> = ({
       gesture,
       confidence: 0.98,
       fingers: {
-        thumb: cmd.servos.thumb === 0,
-        index: cmd.servos.index === 0,
-        middle: cmd.servos.middle === 0,
-        ring: cmd.servos.ring === 0,
-        little: cmd.servos.little === 0,
+        thumb: cmd.servos.thumb < 90,
+        index: cmd.servos.index < 90,
+        middle: cmd.servos.middle < 90,
+        ring: cmd.servos.ring < 90,
+        little: cmd.servos.little < 90,
       },
       timestamp: Date.now(),
     });
@@ -343,11 +343,11 @@ export const CallPage: React.FC<CallPageProps> = ({
       gesture: frame.gesture,
       confidence: 1.0,
       fingers: {
-        thumb: frame.servos.thumb === 0,
-        index: frame.servos.index === 0,
-        middle: frame.servos.middle === 0,
-        ring: frame.servos.ring === 0,
-        little: frame.servos.little === 0,
+        thumb: frame.servos.thumb < 90,
+        index: frame.servos.index < 90,
+        middle: frame.servos.middle < 90,
+        ring: frame.servos.ring < 90,
+        little: frame.servos.little < 90,
       },
       timestamp: Date.now(),
     });

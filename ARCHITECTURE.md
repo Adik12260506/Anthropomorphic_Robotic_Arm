@@ -127,16 +127,16 @@ Each recognized human gesture maps deterministically to targeted angles for the 
 | Gesture Name | Emoji | Robot Command | Thumb (CH 0) | Index (CH 1) | Middle (CH 2) | Ring (CH 3) | Little (CH 4) | Action Description |
 |---|:---:|---|:---:|:---:|:---:|:---:|:---:|---|
 | `OPEN_HAND` | ✋ | `OPEN_ALL_FINGERS` | 0° | 0° | 0° | 0° | 0° | Fully extends all five fingers |
-| `CLOSED_FIST` | ✊ | `CLOSE_ALL_FINGERS` | 90° | 90° | 90° | 90° | 90° | Flexes all five fingers into grip |
-| `THUMBS_UP` | 👍 | `THUMBS_UP_POSITION` | 0° | 90° | 90° | 90° | 90° | Thumb up; four fingers curled |
-| `POINTING` | 👉 | `POINT_INDEX` | 80° | 0° | 90° | 90° | 90° | Extends index finger forward |
-| `PINCH` | 🤏 | `PINCH_GRIP` | 65° | 70° | 20° | 20° | 20° | Thumb & index tips meet |
-| `PEACE` | ✌️ | `TWO_FINGER_POSITION` | 90° | 0° | 0° | 90° | 90° | Extends index & middle fingers |
-| `ONE_FINGER` | ☝️ | `EXTEND_INDEX_ONLY` | 85° | 0° | 85° | 85° | 85° | Extends index only |
-| `TWO_FINGERS` | ✌️ | `EXTEND_TWO_FINGERS` | 90° | 0° | 0° | 90° | 90° | Extends index & middle |
-| `THREE_FINGERS`| 🤟 | `THREE_FINGER_EXTEND` | 85° | 0° | 0° | 0° | 85° | Extends index, middle, ring |
-| `FOUR_FINGERS` | 🖐️ | `FOUR_FINGER_EXTEND` | 90° | 0° | 0° | 0° | 0° | Extends four fingers; thumb folded |
-| `OK_SIGN` | 👌 | `OK_PRECISION_GRIP` | 55° | 60° | 0° | 0° | 0° | Precision circle with thumb & index |
+| `CLOSED_FIST` | ✊ | `CLOSE_ALL_FINGERS` | 180° | 180° | 180° | 180° | 180° | Full 180° power grip closure |
+| `THUMBS_UP` | 👍 | `THUMBS_UP_POSITION` | 0° | 180° | 180° | 180° | 180° | Thumb up (0°); 4 fingers closed (180°) |
+| `POINTING` | 👉 | `POINT_INDEX` | 180° | 0° | 180° | 180° | 180° | Index forward (0°); others closed (180°) |
+| `PINCH` | 🤏 | `PINCH_GRIP` | 140° | 140° | 180° | 180° | 180° | Thumb & index meet; others closed (180°) |
+| `PEACE` | ✌️ | `TWO_FINGER_POSITION` | 180° | 0° | 0° | 180° | 180° | Extends index & middle (0°); others (180°) |
+| `ONE_FINGER` | ☝️ | `EXTEND_INDEX_ONLY` | 180° | 0° | 180° | 180° | 180° | Extends index only; others closed (180°) |
+| `TWO_FINGERS` | ✌️ | `EXTEND_TWO_FINGERS` | 180° | 0° | 0° | 180° | 180° | Extends index & middle; others (180°) |
+| `THREE_FINGERS`| 🤟 | `THREE_FINGER_EXTEND` | 180° | 0° | 0° | 0° | 180° | Extends 3 fingers; thumb & pinky (180°) |
+| `FOUR_FINGERS` | 🖐️ | `FOUR_FINGER_EXTEND` | 180° | 0° | 0° | 0° | 0° | Extends four fingers; thumb closed (180°) |
+| `OK_SIGN` | 👌 | `OK_PRECISION_GRIP` | 140° | 140° | 0° | 0° | 0° | Precision circle; 3 fingers extended (0°) |
 | `UNKNOWN` | 🔄 | `HOLD_POSITION` | — | — | — | — | — | Transition state; holds current angle |
 | `NO_HAND` | ❓ | `STANDBY_REST` | 0° | 0° | 0° | 0° | 0° | Standby neutral pose |
 
