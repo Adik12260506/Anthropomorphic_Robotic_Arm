@@ -253,6 +253,7 @@ export class CloudSignalingChannel {
 
   private decodePublish(bytes: Uint8Array): string | null {
     if ((bytes[0] & 0xf0) !== 0x30) return null;
+    const qos = (bytes[0] >> 1) & 0x03;
     let idx = 1;
     let multiplier = 1;
     let remLen = 0;
@@ -265,8 +266,12 @@ export class CloudSignalingChannel {
     if (idx + 2 > bytes.length) return null;
     const topicLen = (bytes[idx] << 8) | bytes[idx + 1];
     idx += 2 + topicLen;
-    if (idx > bytes.length) return null;
+    if (qos > 0) {
+      idx += 2; // skip Packet Identifier
+    }
+    const payloadLen = remLen - (topicLen + 2 + (qos > 0 ? 2 : 0));
+    if (idx + payloadLen > bytes.length) return null;
     const decoder = new TextDecoder();
-    return decoder.decode(bytes.subarray(idx));
+    return decoder.decode(bytes.subarray(idx, idx + payloadLen));
   }
 }
