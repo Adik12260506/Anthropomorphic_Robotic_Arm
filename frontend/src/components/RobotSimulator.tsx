@@ -57,22 +57,22 @@ export const RobotSimulator: React.FC<RobotSimulatorProps> = ({
     const flexion = Math.min(1.0, Math.max(0, angleDeg / 180));
 
     const segLen = cfg.length;
-    // Joint angles bend progressively based on servo rotation
+    // Joint angles bend progressively based on servo rotation (full 180° curl)
     const baseRot = cfg.baseAngle;
-    const jointCurl = flexion * 45; // Degrees of curl per segment
+    const jointCurl = flexion * 65; // Increased for full 180° anatomical closure
 
     // Segment 1 (Proximal)
-    const rad1 = ((baseRot - jointCurl * 0.4) * Math.PI) / 180;
+    const rad1 = ((baseRot - jointCurl * 0.5) * Math.PI) / 180;
     const x1 = cfg.baseX + Math.sin(rad1) * segLen;
     const y1 = cfg.baseY - Math.cos(rad1) * segLen;
 
     // Segment 2 (Intermediate)
-    const rad2 = ((baseRot - jointCurl * 1.0) * Math.PI) / 180;
+    const rad2 = ((baseRot - jointCurl * 1.3) * Math.PI) / 180;
     const x2 = x1 + Math.sin(rad2) * (segLen * 0.85);
     const y2 = y1 - Math.cos(rad2) * (segLen * 0.85);
 
     // Segment 3 (Distal / Fingertip)
-    const rad3 = ((baseRot - jointCurl * 1.8) * Math.PI) / 180;
+    const rad3 = ((baseRot - jointCurl * 2.1) * Math.PI) / 180;
     const x3 = x2 + Math.sin(rad3) * (segLen * 0.7);
     const y3 = y2 - Math.cos(rad3) * (segLen * 0.7);
 

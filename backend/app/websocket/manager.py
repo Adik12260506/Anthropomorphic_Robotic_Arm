@@ -59,6 +59,16 @@ class RobotTelemetryManager:
             })
             return
 
+        if msg_type == "esp32_handshake":
+            logger.info("ESP32 Hardware Connected via WebSocket!")
+            await websocket.send_json({
+                "type": "handshake_ack",
+                "status": "connected",
+                "device": data.get("device", "ESP32"),
+                "timestamp": time.time()
+            })
+            return
+
         if msg_type == "command" or "command" in data:
             # Parse command
             try:
