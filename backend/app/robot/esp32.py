@@ -30,7 +30,7 @@ class ESP32RobotController(RobotController):
         self.host = host
         self.port = port
         self.is_connected = False
-        self._servos = ServoAngles(thumb=0.0, index=0.0, middle=0.0, ring=0.0, little=0.0)
+        self._servos = ServoAngles(thumb=180.0, index=180.0, middle=180.0, ring=180.0, little=180.0)
         self._last_command = "IDLE"
         self._last_gesture = "NONE"
 

@@ -11,7 +11,7 @@ class SimulatedRobotController(RobotController):
     """
 
     def __init__(self):
-        self._servos = ServoAngles(thumb=0.0, index=0.0, middle=0.0, ring=0.0, little=0.0)
+        self._servos = ServoAngles(thumb=180.0, index=180.0, middle=180.0, ring=180.0, little=180.0)
         self._last_command = "OPEN_ALL_FINGERS"
         self._last_gesture = "OPEN_HAND"
         self._is_connected = True

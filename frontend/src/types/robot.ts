@@ -3,7 +3,7 @@
  */
 
 export interface ServoAngles {
-  thumb: number;   // 0 (fully extended/open) to 180 (fully flexed/closed)
+  thumb: number;   // 0 (fully flexed/closed) to 180 (fully extended/open)
   index: number;
   middle: number;
   ring: number;

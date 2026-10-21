@@ -94,11 +94,11 @@ export const RobotDashboardPage: React.FC<RobotDashboardPageProps> = ({
       gesture,
       confidence: 0.98,
       fingers: {
-        thumb: cmd.servos.thumb < 90,
-        index: cmd.servos.index < 90,
-        middle: cmd.servos.middle < 90,
-        ring: cmd.servos.ring < 90,
-        little: cmd.servos.little < 90,
+        thumb: cmd.servos.thumb > 90,
+        index: cmd.servos.index > 90,
+        middle: cmd.servos.middle > 90,
+        ring: cmd.servos.ring > 90,
+        little: cmd.servos.little > 90,
       },
       timestamp: Date.now(),
     });
@@ -137,11 +137,11 @@ export const RobotDashboardPage: React.FC<RobotDashboardPageProps> = ({
       gesture: frame.gesture,
       confidence: 1.0,
       fingers: {
-        thumb: frame.servos.thumb < 90,
-        index: frame.servos.index < 90,
-        middle: frame.servos.middle < 90,
-        ring: frame.servos.ring < 90,
-        little: frame.servos.little < 90,
+        thumb: frame.servos.thumb > 90,
+        index: frame.servos.index > 90,
+        middle: frame.servos.middle > 90,
+        ring: frame.servos.ring > 90,
+        little: frame.servos.little > 90,
       },
       timestamp: Date.now(),
     });

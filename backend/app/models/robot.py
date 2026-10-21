@@ -9,11 +9,11 @@ class ServoAngles(BaseModel):
     Represents the 5 fingers of the anthropomorphic robotic hand:
     Thumb, Index, Middle, Ring, Little (Pinky).
     """
-    thumb: float = Field(default=0.0, ge=0.0, le=180.0, description="Thumb servo angle in degrees")
-    index: float = Field(default=0.0, ge=0.0, le=180.0, description="Index finger servo angle in degrees")
-    middle: float = Field(default=0.0, ge=0.0, le=180.0, description="Middle finger servo angle in degrees")
-    ring: float = Field(default=0.0, ge=0.0, le=180.0, description="Ring finger servo angle in degrees")
-    little: float = Field(default=0.0, ge=0.0, le=180.0, description="Little/Pinky finger servo angle in degrees")
+    thumb: float = Field(default=180.0, ge=0.0, le=180.0, description="Thumb servo angle (0=closed, 180=open)")
+    index: float = Field(default=180.0, ge=0.0, le=180.0, description="Index finger servo angle (0=closed, 180=open)")
+    middle: float = Field(default=180.0, ge=0.0, le=180.0, description="Middle finger servo angle (0=closed, 180=open)")
+    ring: float = Field(default=180.0, ge=0.0, le=180.0, description="Ring finger servo angle (0=closed, 180=open)")
+    little: float = Field(default=180.0, ge=0.0, le=180.0, description="Little/Pinky finger servo angle (0=closed, 180=open)")
 
 
 class FingerStates(BaseModel):

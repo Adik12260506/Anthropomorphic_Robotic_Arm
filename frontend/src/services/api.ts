@@ -157,7 +157,7 @@ export class ApiService {
     if (!baseUrl) {
       return {
         mode: 'SIMULATION',
-        servos: { thumb: 0, index: 0, middle: 0, ring: 0, little: 0 },
+        servos: { thumb: 180, index: 180, middle: 180, ring: 180, little: 180 },
         last_gesture: 'OPEN_HAND',
         last_command: 'IDLE',
         hardware_target: 'WebRTC P2P',
